@@ -1,0 +1,9 @@
+[font.offset]
+y = 1
+
+[window]
+opacity = 0.85
+
+[window.padding]
+x = 5
+y = 5

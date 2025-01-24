@@ -1,0 +1,8 @@
+window:
+  opacity: 0.95
+  padding:
+    y: 5
+    x: 5
+font:
+  offset:
+    y: 1

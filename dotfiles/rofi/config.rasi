@@ -1,0 +1,11 @@
+//@theme "/run/current-system/sw/share/rofi/themes/DarkBlue.rasi"
+//@theme "/home/jsabella/.local/share/rofi/themes/rounded-purple-dark.rasi"
+configuration {
+  show-icons: true;
+}
+
+//@theme "/usr/share/rofi/themes/material.rasi"
+
+//@theme "/usr/share/rofi/themes/fancy.rasi"
+
+@theme "/home/jsabella/.local/share/rofi/themes/rounded-purple-dark.rasi"
