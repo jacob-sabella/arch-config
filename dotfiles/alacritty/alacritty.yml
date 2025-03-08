@@ -6,3 +6,6 @@ window:
 font:
   offset:
     y: 1
+terminal:
+  shell:
+    program: "/usr/bin/zsh"
