@@ -31,9 +31,9 @@ env = GDK_SCALE,2
 
 # Execute your favorite apps at launch
 exec-once = waybar & alacritty -e bash -c 'neofetch; exec bash' & nm-applet & waypaper --restore
-exec-once = linux-wallpaperengine --screen-root HDMI-A-2 1932579816 &
+exec-once = linux-xwallpaperengine --screen-root HDMI-A-2 1932579816
 exec-once = dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
-# exec-once = firefox --new-window "https://robinhood.com/legend" --kiosk --no-remote -new-instance -P robinhoodlegend
+exec-once = firefox --new-window "https://robinhood.com/legend" --kiosk --no-remote -new-instance -P robinhoodlegend
 
 
 
@@ -161,8 +161,6 @@ bind = $mainMod SHIFT, P, exec, /home/jsabella/.config/bin/start_scrcpy
 # Bring up dev env menu
 bind = $mainMod SHIFT, D, exec, /home/jsabella/.local/bin/devenv_select
 
-# Pin
-bind = $mainMod SHIFT, P, pin
 
 # Screenshot a window
 bind = $mainMod, PRINT, exec, hyprshot -m window --clipboard-only
@@ -181,6 +179,8 @@ bind = , XF86AudioLowerVolume, exec, pamixer --decrease 5
 bind = , XF86AudioMute, exec, pamixer --toggle-mute
 bind = , XF86AudioPlay, exec, playerctl play-pause
 
+# Lock screen
+bind = $mainMod, L, exec, hyprlock
 
 
 windowrulev2 = stayfocused, title:^()$,class:^(steam)$

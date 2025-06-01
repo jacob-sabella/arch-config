@@ -12,18 +12,19 @@ if [ $? -ne 0 ]; then
 fi
 
 # Connect to the phone via ADB
-adb connect "$PHONE_IP:$ADB_PORT" > /dev/null 2>&1
+#adb connect "$PHONE_IP:$ADB_PORT" > /dev/null 2>&1
 
 # Verify ADB connection
-ADB_DEVICES=$(adb devices | grep "$PHONE_IP")
-if [ -z "$ADB_DEVICES" ]; then
-    echo "ADB connection to the phone failed. Exiting..."
-    exit 1
-fi
+#ADB_DEVICES=$(adb devices | grep "$PHONE_IP")
+#if [ -z "$ADB_DEVICES" ]; then
+#    echo "ADB connection to the phone failed. Exiting..."
+#    exit 1
+#fi
 
 # Check if scrcpy is already running
 # Start scrcpy and ensure it appears in workspace 10 on Hyprland
-scrcpy --serial "$PHONE_IP:$ADB_PORT" &
+#scrcpy --serial "$PHONE_IP:$ADB_PORT" &
+scrcpy &
 echo "scrcpy launched on workspace $HYPRLAND_WORKSPACE."
 
 
