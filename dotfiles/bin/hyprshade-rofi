@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ~/.local/bin/hyprshade-rofi
+set -euo pipefail
+
+# Build a clean list of shaders (no blanks, trimmed)
+mapfile -t SHADERS < <(hyprshade ls |
+  sed -e 's/\r$//' -e 's/^[[:space:]]*//; s/[[:space:]]*$//' -e '/^$/d' |
+  sort -u)
+
+# Show menu (prepend a disable option)
+choice="$(
+  {
+    echo "off (disable)"
+    printf '%s\n' "${SHADERS[@]}"
+  } |
+    rofi -dmenu -i -p "Hyprshade" -no-custom
+)"
+
+# Normalize any weird whitespace/CR
+choice="$(printf '%s' "${choice:-}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+
+# If cancelled/blank/explicit off → disable
+if [[ -z "$choice" || "$choice" == "off (disable)" ]]; then
+  hyprshade off
+  command -v notify-send >/dev/null && notify-send "Hyprshade" "Shaders disabled"
+  exit 0
+fi
+
+# Don’t call hyprshade on unless non-empty *and* known
+if printf '%s\n' "${SHADERS[@]}" | grep -Fxq -- "$choice"; then
+  hyprshade on "$choice"
+  command -v notify-send >/dev/null && notify-send "Hyprshade" "Enabled: $choice"
+  exit 0
+fi
+
+# Fallback: unknown or somehow empty → disable (never call `on ""`)
+hyprshade off
+command -v notify-send >/dev/null && notify-send "Hyprshade" "Invalid pick; shaders disabled"
