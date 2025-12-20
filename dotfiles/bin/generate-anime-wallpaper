@@ -1,0 +1,93 @@
+#!/bin/bash
+
+# Generate anime wallpaper using stable-diffusion.cpp with random prompts
+# This script generates a wallpaper with a random prompt and saves it
+
+SD_BIN="$HOME/AI/stable-diffusion.cpp/build/bin/sd"
+MODELS_DIR="$HOME/AI/models/sdxl"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers/anime-ultrawide"
+TEMP_OUTPUT="/tmp/anime_wallpaper_temp.png"
+LAST_MODEL_CACHE="$HOME/.cache/last-sd-model"
+
+# SDXL resolution - HIGH QUALITY, true 32:9 aspect ratio
+# 3200x896 (3.571 ratio, 0.4% off from perfect 32:9) - optimized for 16GB VRAM
+GEN_WIDTH=3200
+GEN_HEIGHT=896
+
+# Use last selected model, or default to animagine
+if [ -f "$LAST_MODEL_CACHE" ]; then
+    SELECTED_MODEL=$(cat "$LAST_MODEL_CACHE")
+    MODEL_PATH="$MODELS_DIR/$SELECTED_MODEL.safetensors"
+else
+    MODEL_PATH="$MODELS_DIR/animagine-xl-4.0.safetensors"
+fi
+
+# Anime prompts for variety
+PROMPTS=(
+  "anime landscape, cherry blossoms, sunset, mountains, serene, high quality, detailed, 32:9 aspect ratio"
+  "anime cityscape, neon lights, cyberpunk, futuristic, night scene, detailed, 32:9 aspect ratio"
+  "anime fantasy landscape, floating islands, magical, colorful sky, detailed, 32:9 aspect ratio"
+  "anime beach scene, ocean waves, sunset, palm trees, tropical, detailed, 32:9 aspect ratio"
+  "anime forest, mystical, glowing lights, fantasy, detailed, 32:9 aspect ratio"
+  "anime mountain range, clouds, dramatic lighting, epic, detailed, 32:9 aspect ratio"
+  "anime space scene, stars, nebula, cosmic, colorful, detailed, 32:9 aspect ratio"
+  "anime village, traditional japanese, peaceful, detailed, 32:9 aspect ratio"
+  "anime sakura trees, temple, shrine, peaceful, detailed, 32:9 aspect ratio"
+  "anime underwater scene, coral reef, fish, colorful, detailed, 32:9 aspect ratio"
+)
+
+# Pick a random prompt
+PROMPT="${PROMPTS[$RANDOM % ${#PROMPTS[@]}]}"
+
+# Add style enhancers
+FULL_PROMPT="$PROMPT, anime style, masterpiece, ultra wide, panoramic"
+NEGATIVE_PROMPT="lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, multiple panels, split screen"
+
+echo "Generating wallpaper..."
+echo "Prompt: $PROMPT"
+notify-send "Wallpaper Generation" "Generating random anime wallpaper..." -t 3000
+
+# Generate image using SDXL (Animagine XL 4.0)
+# SDXL works better at higher res than SD 1.5 and uses different optimal settings
+"$SD_BIN" \
+  -m "$MODEL_PATH" \
+  -p "$FULL_PROMPT" \
+  -n "$NEGATIVE_PROMPT" \
+  -o "$TEMP_OUTPUT" \
+  -W "$GEN_WIDTH" \
+  -H "$GEN_HEIGHT" \
+  --steps 35 \
+  --cfg-scale 6.5 \
+  --sampling-method euler_a \
+  --rng cuda \
+  --clip-on-cpu \
+  --offload-to-cpu \
+  --vae-tiling \
+  -s -1
+
+# Check if generation was successful
+if [ ! -f "$TEMP_OUTPUT" ]; then
+  echo "Error: No image generated"
+  notify-send "Wallpaper Generation" "Failed - no image generated" -t 3000
+  exit 1
+fi
+
+# Move to wallpaper directory with timestamp
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+DEST="$WALLPAPER_DIR/anime_${TIMESTAMP}.png"
+mkdir -p "$WALLPAPER_DIR"
+mv "$TEMP_OUTPUT" "$DEST"
+
+echo "Wallpaper generated and saved to: $DEST"
+
+# Set as current wallpaper
+if command -v swww &>/dev/null; then
+  swww img "$DEST" \
+    --transition-type wipe \
+    --transition-angle 30 \
+    --transition-duration 2 \
+    --outputs HDMI-A-2 2>/dev/null
+  echo "$DEST" >"$HOME/.cache/current-wallpaper"
+fi
+
+notify-send "Wallpaper Generated!" "Saved and applied successfully" -t 3000

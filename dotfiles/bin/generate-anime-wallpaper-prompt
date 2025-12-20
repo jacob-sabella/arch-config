@@ -1,0 +1,205 @@
+#!/bin/bash
+
+# Generate anime wallpaper with custom prompt using stable-diffusion.cpp
+# Shows progress in terminal window
+
+SD_BIN="$HOME/AI/stable-diffusion.cpp/build/bin/sd"
+MODELS_DIR="$HOME/AI/models/sdxl"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers/anime-ultrawide"
+TEMP_OUTPUT="/tmp/anime_wallpaper_temp.png"
+LAST_MODEL_CACHE="$HOME/.cache/last-sd-model"
+
+# SDXL resolution - HIGH QUALITY, true 32:9 aspect ratio
+# 3200x896 (3.571 ratio, 0.4% off from perfect 32:9) - optimized for 16GB VRAM
+GEN_WIDTH=3200
+GEN_HEIGHT=896
+
+# Get available models
+mapfile -t MODEL_FILES < <(find "$MODELS_DIR" -name "*.safetensors" -type f | sort)
+
+if [ ${#MODEL_FILES[@]} -eq 0 ]; then
+    notify-send "Wallpaper Generation" "No models found in $MODELS_DIR" -t 3000
+    exit 1
+fi
+
+# Build model selection menu with friendly names
+MODEL_NAMES=()
+for model in "${MODEL_FILES[@]}"; do
+    MODEL_NAMES+=("$(basename "$model" .safetensors)")
+done
+
+# Get last used model for default selection
+LAST_MODEL=""
+if [ -f "$LAST_MODEL_CACHE" ]; then
+    LAST_MODEL=$(cat "$LAST_MODEL_CACHE")
+fi
+
+# Create rofi menu with last model as default
+ROFI_INPUT=$(printf '%s\n' "${MODEL_NAMES[@]}")
+if [ -n "$LAST_MODEL" ]; then
+    SELECTED_MODEL=$(echo "$ROFI_INPUT" | rofi -dmenu -p "Select Model" -select "$LAST_MODEL" -theme-str 'window {width: 40%;}')
+else
+    SELECTED_MODEL=$(echo "$ROFI_INPUT" | rofi -dmenu -p "Select Model" -theme-str 'window {width: 40%;}')
+fi
+
+# Exit if no model selected
+if [ -z "$SELECTED_MODEL" ]; then
+    notify-send "Wallpaper Generation" "Cancelled - no model selected" -t 2000
+    exit 0
+fi
+
+# Save selected model for next time
+echo "$SELECTED_MODEL" > "$LAST_MODEL_CACHE"
+
+# Set full model path
+MODEL_PATH="$MODELS_DIR/$SELECTED_MODEL.safetensors"
+
+# Get custom prompt from user via rofi
+CUSTOM_PROMPT=$(rofi -dmenu -p "Anime Wallpaper Prompt" -theme-str 'window {width: 50%;}')
+
+# Exit if no prompt provided
+if [ -z "$CUSTOM_PROMPT" ]; then
+    notify-send "Wallpaper Generation" "Cancelled - no prompt provided" -t 2000
+    exit 0
+fi
+
+# Add technical details for best quality
+FULL_PROMPT="$CUSTOM_PROMPT, anime style, high quality, detailed, masterpiece, 32:9 aspect ratio, ultra wide, panoramic"
+NEGATIVE_PROMPT="lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, multiple panels, split screen"
+
+# Create generation script
+cat > /tmp/sd-gen.sh << 'GENSCRIPT'
+#!/bin/bash
+
+SD_BIN="$HOME/AI/stable-diffusion.cpp/build/bin/sd"
+MODEL_PATH="MODEL_PATH_PLACEHOLDER"
+MODEL_NAME="MODEL_NAME_PLACEHOLDER"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers/anime-ultrawide"
+TEMP_OUTPUT="/tmp/anime_wallpaper_temp.png"
+LOG_FILE="/tmp/sd-wallpaper-gen.log"
+
+# SDXL resolution - HIGH QUALITY, true 32:9 aspect ratio
+# 3200x896 (3.571 ratio, 0.4% off from perfect 32:9) - optimized for 16GB VRAM
+GEN_WIDTH=3200
+GEN_HEIGHT=896
+
+# Log everything
+exec 2>&1 | tee "$LOG_FILE"
+
+echo "========================================"
+echo " stable-diffusion.cpp Wallpaper Generator"
+echo "========================================"
+echo ""
+echo "Prompt: PROMPT_PLACEHOLDER"
+echo ""
+echo "Model: MODEL_NAME_PLACEHOLDER"
+echo "Resolution: 3200x896 (true 32:9 ultrawide - HIGH QUALITY)"
+echo "Sampler: Euler A, 35 steps, CFG 6.5"
+echo ""
+echo "Checking dependencies..."
+
+# Check if sd binary exists
+if [ ! -f "$SD_BIN" ]; then
+    echo "✗ ERROR: stable-diffusion.cpp binary not found at: $SD_BIN"
+    echo ""
+    echo "Press Enter to close..."
+    read
+    exit 1
+fi
+
+# Check if model exists
+if [ ! -f "$MODEL_PATH" ]; then
+    echo "✗ ERROR: Model not found at: $MODEL_PATH"
+    echo ""
+    echo "Press Enter to close..."
+    read
+    exit 1
+fi
+
+echo "✓ All dependencies found"
+echo ""
+echo "Generating wallpaper..."
+echo "This may take 60-120 seconds depending on your GPU."
+echo ""
+
+# Run stable-diffusion.cpp with SDXL (Animagine XL 4.0)
+# SDXL handles higher resolutions much better than SD 1.5
+"$SD_BIN" \
+    -m "$MODEL_PATH" \
+    -p "FULLPROMPT_PLACEHOLDER" \
+    -n "NEGPROMPT_PLACEHOLDER" \
+    -o "$TEMP_OUTPUT" \
+    -W "$GEN_WIDTH" \
+    -H "$GEN_HEIGHT" \
+    --steps 35 \
+    --cfg-scale 6.5 \
+    --sampling-method euler_a \
+    --rng cuda \
+    --clip-on-cpu \
+    --offload-to-cpu \
+    --vae-tiling \
+    -s -1
+
+GEN_EXIT=$?
+
+if [ $GEN_EXIT -ne 0 ]; then
+    echo ""
+    echo "✗ Generation failed with exit code $GEN_EXIT"
+    echo ""
+    echo "Press Enter to close..."
+    read
+    exit 1
+fi
+
+# Check if output was created
+if [ ! -f "$TEMP_OUTPUT" ]; then
+    echo ""
+    echo "✗ No image was generated"
+    echo "Output file not found at: $TEMP_OUTPUT"
+    echo ""
+    echo "Press Enter to close..."
+    read
+    exit 1
+fi
+
+# Move to wallpaper directory with timestamp
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+DEST="$WALLPAPER_DIR/anime_${TIMESTAMP}.png"
+mkdir -p "$WALLPAPER_DIR"
+mv "$TEMP_OUTPUT" "$DEST"
+
+echo ""
+echo "✓ Saved to: $DEST"
+
+# Set as wallpaper
+if command -v swww &> /dev/null; then
+    echo "Setting as wallpaper..."
+    swww img "$DEST" \
+        --transition-type wipe \
+        --transition-angle 30 \
+        --transition-duration 2 \
+        --outputs HDMI-A-2 2>/dev/null
+    echo "$DEST" > "$HOME/.cache/current-wallpaper"
+    echo "✓ Wallpaper applied!"
+fi
+
+notify-send "Wallpaper Generated!" "Saved and applied successfully" -t 3000
+
+echo ""
+echo "All done! Press Enter to close..."
+read
+exit 0
+GENSCRIPT
+
+# Replace placeholders
+sed -i "s|MODEL_PATH_PLACEHOLDER|$MODEL_PATH|g" /tmp/sd-gen.sh
+sed -i "s|MODEL_NAME_PLACEHOLDER|$SELECTED_MODEL|g" /tmp/sd-gen.sh
+sed -i "s|PROMPT_PLACEHOLDER|$CUSTOM_PROMPT|g" /tmp/sd-gen.sh
+sed -i "s|FULLPROMPT_PLACEHOLDER|$FULL_PROMPT|g" /tmp/sd-gen.sh
+sed -i "s|NEGPROMPT_PLACEHOLDER|$NEGATIVE_PROMPT|g" /tmp/sd-gen.sh
+
+chmod +x /tmp/sd-gen.sh
+
+# Launch in terminal window
+notify-send "Wallpaper Generation" "Starting generation: $CUSTOM_PROMPT" -t 3000
+alacritty -e /tmp/sd-gen.sh &

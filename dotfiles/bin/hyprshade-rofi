@@ -2,37 +2,72 @@
 # ~/.local/bin/hyprshade-rofi
 set -euo pipefail
 
-# Build a clean list of shaders (no blanks, trimmed)
+# Shader descriptions
+declare -A SHADER_DESC=(
+    ["_pulse"]="Pulsing effect"
+    ["blue-light-filter"]="Reduces blue light for eye comfort"
+    ["cyberpunk"]="Cyberpunk/neon aesthetic"
+    ["cycle-nord"]="Nord color cycling"
+    ["cycle-tone"]="Tone cycling effect"
+    ["deep-space"]="Deep space dark theme"
+    ["focus-mode"]="Grayscale focus mode"
+    ["noir"]="Black and white noir filter"
+    ["vaporwave"]="Vaporwave aesthetic"
+    ["vibrance"]="Enhanced color vibrance"
+)
+
+# Get current shader
+CURRENT=$(hyprshade current 2>/dev/null || echo "off")
+[[ -z "$CURRENT" ]] && CURRENT="off"
+
+# Build a clean list of shaders
 mapfile -t SHADERS < <(hyprshade ls |
   sed -e 's/\r$//' -e 's/^[[:space:]]*//; s/[[:space:]]*$//' -e '/^$/d' |
   sort -u)
 
-# Show menu (prepend a disable option)
-choice="$(
-  {
-    echo "off (disable)"
-    printf '%s\n' "${SHADERS[@]}"
-  } |
-    rofi -dmenu -i -p "Hyprshade" -no-custom
-)"
+# Build menu with current indicator and descriptions
+MENU=""
+if [[ "$CURRENT" == "off" ]]; then
+    MENU="● off - No shader active\n"
+else
+    MENU="  off - Disable shader\n"
+fi
 
-# Normalize any weird whitespace/CR
-choice="$(printf '%s' "${choice:-}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+for shader in "${SHADERS[@]}"; do
+    desc="${SHADER_DESC[$shader]:-No description}"
+    if [[ "$shader" == "$CURRENT" ]]; then
+        MENU+="● $shader - $desc (ACTIVE)\n"
+    else
+        MENU+="  $shader - $desc\n"
+    fi
+done
 
-# If cancelled/blank/explicit off → disable
-if [[ -z "$choice" || "$choice" == "off (disable)" ]]; then
+# Show menu
+choice="$(echo -e "$MENU" | rofi -dmenu -i -p "Hyprshade Filter" \
+    -mesg "Current: $CURRENT" \
+    -theme-str 'window {width: 40%;}' \
+    -no-custom)"
+
+# Extract shader name (remove indicator and description)
+shader_name=$(echo "$choice" | sed 's/^[● ]*//' | sed 's/ - .*//')
+
+# Normalize whitespace
+shader_name="$(printf '%s' "${shader_name:-}" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+
+# If cancelled or off selected
+if [[ -z "$shader_name" || "$shader_name" == "off" ]]; then
   hyprshade off
-  command -v notify-send >/dev/null && notify-send "Hyprshade" "Shaders disabled"
+  notify-send "Hyprshade" "Shaders disabled" -t 2000
   exit 0
 fi
 
-# Don’t call hyprshade on unless non-empty *and* known
-if printf '%s\n' "${SHADERS[@]}" | grep -Fxq -- "$choice"; then
-  hyprshade on "$choice"
-  command -v notify-send >/dev/null && notify-send "Hyprshade" "Enabled: $choice"
+# Apply shader if valid
+if printf '%s\n' "${SHADERS[@]}" | grep -Fxq -- "$shader_name"; then
+  hyprshade on "$shader_name"
+  notify-send "Hyprshade" "Enabled: $shader_name" -t 2000
   exit 0
 fi
 
-# Fallback: unknown or somehow empty → disable (never call `on ""`)
+# Fallback
 hyprshade off
-command -v notify-send >/dev/null && notify-send "Hyprshade" "Invalid pick; shaders disabled"
+notify-send "Hyprshade" "Invalid selection; shaders disabled" -t 2000

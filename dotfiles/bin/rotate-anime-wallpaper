@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Rotate anime wallpapers on 32:9 monitor using swww
+
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+ANIME_DIR="$WALLPAPER_DIR/anime-ultrawide"
+STATE_FILE="$HOME/.cache/current-wallpaper"
+MONITOR="HDMI-A-2"
+
+# Create cache directory if it doesn't exist
+mkdir -p "$HOME/.cache"
+
+# Check if swww daemon is running, if not start it
+if ! pgrep -x swww-daemon > /dev/null; then
+    swww-daemon &
+    sleep 2
+fi
+
+# Function to get a random wallpaper
+get_random_wallpaper() {
+    # First check anime-ultrawide directory
+    if [ -d "$ANIME_DIR" ] && [ "$(find "$ANIME_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) 2>/dev/null | wc -l)" -gt 0 ]; then
+        find "$ANIME_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) 2>/dev/null | shuf -n 1
+    # Fallback to main wallpaper directory
+    elif [ -d "$WALLPAPER_DIR" ]; then
+        find "$WALLPAPER_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) 2>/dev/null | shuf -n 1
+    else
+        echo "Error: No wallpapers found" >&2
+        return 1
+    fi
+}
+
+# Get current wallpaper
+CURRENT_WALLPAPER=""
+if [ -f "$STATE_FILE" ]; then
+    CURRENT_WALLPAPER=$(cat "$STATE_FILE")
+fi
+
+# Get a new random wallpaper (different from current)
+NEW_WALLPAPER=""
+for i in {1..10}; do
+    NEW_WALLPAPER=$(get_random_wallpaper)
+    if [ -n "$NEW_WALLPAPER" ] && { [ "$NEW_WALLPAPER" != "$CURRENT_WALLPAPER" ] || [ $i -eq 10 ]; }; then
+        break
+    fi
+done
+
+if [ -z "$NEW_WALLPAPER" ]; then
+    echo "Error: Could not find a wallpaper" >&2
+    exit 1
+fi
+
+# Set the wallpaper using swww
+swww img "$NEW_WALLPAPER" \
+    --transition-type wipe \
+    --transition-angle 30 \
+    --transition-duration 2 \
+    --outputs "$MONITOR" 2>/dev/null
+
+# Save the current wallpaper to state file
+echo "$NEW_WALLPAPER" > "$STATE_FILE"
+
+# Send notification
+if command -v notify-send &> /dev/null; then
+    WALLPAPER_NAME=$(basename "$NEW_WALLPAPER")
+    notify-send "Wallpaper Changed" "$WALLPAPER_NAME" -t 2000 2>/dev/null
+fi
+
+echo "Wallpaper set to: $NEW_WALLPAPER"
