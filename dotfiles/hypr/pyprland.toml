@@ -1,0 +1,35 @@
+[pyprland]
+plugins = [
+    "scratchpads",
+    "magnify"
+]
+
+# Dropdown terminal scratchpad
+[scratchpads.term]
+animation = "fromTop"
+command = "kitty --class kitty-dropterm"
+class = "kitty-dropterm"
+size = "80% 70%"
+position = "10% 10%"
+lazy = true
+
+# Spotify scratchpad
+[scratchpads.spotify]
+animation = "fromTop"
+command = "spotify"
+class = "spotify"
+size = "80% 80%"
+lazy = true
+
+# Armagetron Advanced game scratchpad
+[scratchpads.tron]
+animation = "fromTop"
+command = "armagetronad"
+class = "Armagetron Advanced"
+size = "85% 85%"
+margin = 100
+
+# Magnify/Zoom configuration
+[magnify]
+# zoom factor (1.0 = no zoom, 2.0 = 2x zoom)
+factor = 2.0
