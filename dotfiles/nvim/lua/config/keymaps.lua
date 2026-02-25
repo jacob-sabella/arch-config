@@ -7,3 +7,6 @@ vim.api.nvim_create_user_command("FTermToggle", require("FTerm").toggle, { bang 
 
 -- Map Alt+\ to FTermToggle
 vim.keymap.set({ "n", "t" }, "<C-\\>", "<cmd>FTermToggle<cr>", { desc = "Toggle FTerm" })
+
+-- Replace selection with clipboard contents globally
+vim.keymap.set("v", "<leader>R", 'y:%s/<C-r>"/<C-r>+/g<CR>', { noremap = true, desc = "Replace selection with clipboard" })
