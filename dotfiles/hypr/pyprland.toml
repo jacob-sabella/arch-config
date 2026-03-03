@@ -29,6 +29,14 @@ class = "Armagetron Advanced"
 size = "85% 85%"
 margin = 100
 
+# Anime (ani-cli) scratchpad
+[scratchpads.anime]
+animation = "fromTop"
+command = "kitty --class kitty-anime -o window_padding_width=0 -o tab_bar_style=hidden -o placement_strategy=top-left -o sync_to_monitor=yes -o repaint_delay=8 -o input_delay=0 -e env ANI_CLI_PLAYER='mpv --vo=kitty --vo-kitty-top=0 --vo-kitty-left=0 --vo-kitty-use-shm=yes --hwdec=auto --really-quiet' ani-cli --rofi --no-detach"
+class = "kitty-anime"
+size = "85% 85%"
+lazy = true
+
 # Magnify/Zoom configuration
 [magnify]
 # zoom factor (1.0 = no zoom, 2.0 = 2x zoom)
