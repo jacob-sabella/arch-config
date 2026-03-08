@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SHADERS_DIR="$HOME/.config/ghostty/shaders"
+GHOSTTY_CONFIG="$HOME/.config/ghostty/config"
+
+# Get current shader from config
+CURRENT=$(grep -m1 '^custom-shader\s*=' "$GHOSTTY_CONFIG" 2>/dev/null | sed 's/.*=\s*//' | xargs basename 2>/dev/null || echo "none")
+
+# Build fzf list: "none" first, then all .glsl files
+SHADERS=()
+while IFS= read -r -d '' f; do
+    SHADERS+=("$(basename "$f")")
+done < <(find -L "$SHADERS_DIR" -maxdepth 1 -name '*.glsl' -print0 | sort -z)
+
+MENU="none (disable shader)"$'\n'
+for s in "${SHADERS[@]}"; do
+    if [[ "$s" == "$CURRENT" ]]; then
+        MENU+="$s  [active]"$'\n'
+    else
+        MENU+="$s"$'\n'
+    fi
+done
+
+# Pick with fzf
+CHOICE=$(printf '%s' "$MENU" | fzf \
+    --prompt="Ghostty shader > " \
+    --header="Current: $CURRENT" \
+    --height=~40% \
+    --reverse \
+    --no-sort) || exit 0
+
+# Strip trailing annotations
+SHADER_NAME=$(echo "$CHOICE" | sed 's/[[:space:]]*\[active\]//' | xargs)
+
+# Update config: remove existing custom-shader line, add new one
+if [[ "$SHADER_NAME" == "none (disable shader)" ]]; then
+    sed -i '/^custom-shader\s*=/d' "$GHOSTTY_CONFIG"
+    notify-send "Ghostty Shaders" "Shader disabled — reload config with Ctrl+Shift+," -t 3000
+else
+    SHADER_PATH="$SHADERS_DIR/$SHADER_NAME"
+    if [[ ! -f "$SHADER_PATH" ]]; then
+        echo "Shader not found: $SHADER_PATH" >&2
+        exit 1
+    fi
+    if grep -q '^custom-shader\s*=' "$GHOSTTY_CONFIG" 2>/dev/null; then
+        sed -i "s|^custom-shader\s*=.*|custom-shader = $SHADER_PATH|" "$GHOSTTY_CONFIG"
+    else
+        echo "custom-shader = $SHADER_PATH" >> "$GHOSTTY_CONFIG"
+    fi
+    notify-send "Ghostty Shaders" "Enabled: $SHADER_NAME — reload with Ctrl+Shift+," -t 3000
+fi
