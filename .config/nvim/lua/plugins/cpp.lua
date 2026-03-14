@@ -19,6 +19,16 @@ return {
             completeUnimported = true,
             clangdFileStatus = true,
           },
+          settings = {
+            clangd = {
+              InlayHints = {
+                Enabled = false,
+                ParameterNames = false,
+                DeducedTypes = false,
+                Designators = false,
+              },
+            },
+          },
         },
       },
     },
