@@ -4,4 +4,3 @@
 background-opacity = 1.0
 background = #050010
 custom-shader-animation = always
-custom-shader = /Users/Jacob.Sabella/.config/ghostty/shaders/starfield-colors.glsl
