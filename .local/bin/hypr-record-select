@@ -1,0 +1,67 @@
+#!/bin/bash
+
+set -euo pipefail
+
+record_dir="${XDG_VIDEOS_DIR:-$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Videos")}/Screenrecords"
+mkdir -p "$record_dir"
+
+timestamp="$(date +%Y-%m-%d_%H-%M-%S)"
+output_file="$record_dir/recording_${timestamp}.mkv"
+state_file="${XDG_RUNTIME_DIR:-/tmp}/hypr-record-select.state"
+
+need_cmd() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        notify-send "Screen recording failed" "Missing required command: $1"
+        exit 1
+    fi
+}
+
+for cmd in hyprctl jq notify-send slurp wf-recorder; do
+    need_cmd "$cmd"
+done
+
+if [[ -f "$state_file" ]]; then
+    IFS=$'\t' read -r recorder_pid current_output < "$state_file" || true
+    if [[ -n "${recorder_pid:-}" ]] && kill -0 "$recorder_pid" 2>/dev/null; then
+        kill -INT "$recorder_pid"
+        rm -f "$state_file"
+        notify-send "Screen recording stopped" "$(basename "${current_output:-$output_file}")"
+        exit 0
+    fi
+    rm -f "$state_file"
+fi
+
+selection="$(slurp -f '%x %y %w %h' || true)"
+[[ -n "$selection" ]] || exit 0
+
+read -r x y w h <<< "$selection"
+
+if (( w <= 2 && h <= 2 )); then
+    window_geometry="$(
+        hyprctl -j clients | jq -r --argjson x "$x" --argjson y "$y" '
+            [
+                .[]
+                | select(.mapped == true)
+                | select($x >= .at[0] and $x < (.at[0] + .size[0]))
+                | select($y >= .at[1] and $y < (.at[1] + .size[1]))
+            ]
+            | last
+            | if . == null then empty else "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])" end
+        '
+    )"
+
+    if [[ -z "$window_geometry" ]]; then
+        notify-send "Screen recording failed" "No window found at click position"
+        exit 1
+    fi
+
+    read -r x y w h <<< "$window_geometry"
+fi
+
+geometry="${x},${y} ${w}x${h}"
+
+wf-recorder -g "$geometry" -f "$output_file" >/dev/null 2>&1 &
+recorder_pid=$!
+printf '%s\t%s\n' "$recorder_pid" "$output_file" > "$state_file"
+
+notify-send "Screen recording started" "$(basename "$output_file")"
