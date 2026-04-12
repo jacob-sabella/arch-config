@@ -1,0 +1,33 @@
+#!/bin/bash
+# Pre-commit hook: scan staged changes for secrets with TruffleHog
+
+TRUFFLEHOG="$HOME/.local/bin/trufflehog"
+
+if [ ! -x "$TRUFFLEHOG" ]; then
+    echo "[trufflehog] not found at $TRUFFLEHOG, skipping scan"
+    exit 0
+fi
+
+echo "[trufflehog] scanning staged changes..."
+
+# Write staged content to a temp dir and scan it
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+git diff --cached --name-only | while read -r f; do
+    mkdir -p "$TMPDIR/$(dirname "$f")"
+    git show ":$f" > "$TMPDIR/$f" 2>/dev/null
+done
+
+"$TRUFFLEHOG" filesystem "$TMPDIR" --only-verified --no-update 2>/dev/null
+EXIT=$?
+
+if [ $EXIT -ne 0 ]; then
+    echo ""
+    echo "[trufflehog] !! Potential secrets detected in staged files !!"
+    echo "Review the output above. To bypass (dangerous): git commit --no-verify"
+    exit 1
+fi
+
+echo "[trufflehog] clean."
+exit 0
