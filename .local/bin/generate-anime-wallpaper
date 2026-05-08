@@ -1,93 +1,128 @@
 #!/bin/bash
-
-# Generate anime wallpaper using stable-diffusion.cpp with random prompts
-# This script generates a wallpaper with a random prompt and saves it
+# Random wallpaper generator via stable-diffusion.cpp
+# Single-pass at 1344x768 → upscayl 4x → crop to 7680x2160
 
 SD_BIN="$HOME/AI/stable-diffusion.cpp/build/bin/sd"
-MODELS_DIR="$HOME/AI/models/sdxl"
-WALLPAPER_DIR="$HOME/Pictures/Wallpapers/anime-ultrawide"
-TEMP_OUTPUT="/tmp/anime_wallpaper_temp.png"
+MODELS_DIR="$HOME/AI/models"
+WALLPAPER_DIR="$HOME/Pictures/Wallpapers"
+TEMP_GEN="/tmp/wallpaper_gen.png"
+TEMP_UPSCALED="/tmp/wallpaper_upscaled.png"
 LAST_MODEL_CACHE="$HOME/.cache/last-sd-model"
-
-# SDXL resolution - HIGH QUALITY, true 32:9 aspect ratio
-# 3200x896 (3.571 ratio, 0.4% off from perfect 32:9) - optimized for 16GB VRAM
-GEN_WIDTH=3200
-GEN_HEIGHT=896
+MONITOR="HDMI-A-2"
+TARGET_W=7680
+TARGET_H=2160
+UPSCAYL="/usr/share/upscayl/bin/upscayl-bin"
+UPSCAYL_MODELS="/usr/share/upscayl/models"
 
 # Use last selected model, or default to animagine
 if [ -f "$LAST_MODEL_CACHE" ]; then
     SELECTED_MODEL=$(cat "$LAST_MODEL_CACHE")
-    MODEL_PATH="$MODELS_DIR/$SELECTED_MODEL.safetensors"
-else
-    MODEL_PATH="$MODELS_DIR/animagine-xl-4.0.safetensors"
+    MODEL_PATH=$(find "$MODELS_DIR" -name "${SELECTED_MODEL}.safetensors" -type f | head -1)
+fi
+if [ -z "$MODEL_PATH" ] || [ ! -f "$MODEL_PATH" ]; then
+    MODEL_PATH="$MODELS_DIR/sdxl/Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors"
+    SELECTED_MODEL="Juggernaut-XL_v9_RunDiffusionPhoto_v2"
 fi
 
-# Anime prompts for variety
+MODEL_LOWER="${SELECTED_MODEL,,}"
+
+if [[ "$MODEL_LOWER" == *"xl"* ]] || [[ "$MODEL_LOWER" == *"juggernaut"* ]]; then
+    GEN_W=1344; GEN_H=768
+else
+    GEN_W=768; GEN_H=448
+fi
+
+# Model-type-aware generation params
+# Lightning/Turbo = distilled, needs very low steps + CFG
+if [[ "$MODEL_LOWER" == *"lightning"* ]] || [[ "$MODEL_LOWER" == *"turbo"* ]] || [[ "$MODEL_LOWER" == *"lcm"* ]]; then
+    STEPS=8
+    CFG=2.0
+    SAMPLER="euler"
+    SCHEDULER="discrete"
+else
+    STEPS=80
+    CFG=7.0
+    SAMPLER="dpm++2m"
+    SCHEDULER="karras"
+fi
+
+# Animagine/Illustrious want Danbooru quality tags
+if [[ "$MODEL_LOWER" == *"animagine"* ]] || [[ "$MODEL_LOWER" == *"illustrious"* ]]; then
+    QUALITY="masterpiece, best quality, very aesthetic, absurdres, highly detailed, intricate details, no humans, scenery"
+    NEG="worst quality, low quality, lowres, text, watermark, signature, blurry, ugly, deformed, tiling, split screen, multiple panels, humans, person, character, bad composition"
+else
+    QUALITY="masterpiece, best quality, ultra detailed, highly detailed, 8k, sharp focus, professional photography, dramatic lighting, cinematic"
+    NEG="worst quality, low quality, blurry, ugly, deformed, watermark, text, signature, tiling, split screen, multiple panels, bad composition, overexposed, underexposed, flat colors"
+fi
+
 PROMPTS=(
-  "anime landscape, cherry blossoms, sunset, mountains, serene, high quality, detailed, 32:9 aspect ratio"
-  "anime cityscape, neon lights, cyberpunk, futuristic, night scene, detailed, 32:9 aspect ratio"
-  "anime fantasy landscape, floating islands, magical, colorful sky, detailed, 32:9 aspect ratio"
-  "anime beach scene, ocean waves, sunset, palm trees, tropical, detailed, 32:9 aspect ratio"
-  "anime forest, mystical, glowing lights, fantasy, detailed, 32:9 aspect ratio"
-  "anime mountain range, clouds, dramatic lighting, epic, detailed, 32:9 aspect ratio"
-  "anime space scene, stars, nebula, cosmic, colorful, detailed, 32:9 aspect ratio"
-  "anime village, traditional japanese, peaceful, detailed, 32:9 aspect ratio"
-  "anime sakura trees, temple, shrine, peaceful, detailed, 32:9 aspect ratio"
-  "anime underwater scene, coral reef, fish, colorful, detailed, 32:9 aspect ratio"
+    "cherry blossom forest path, ancient stone lanterns lining the way, cascading pink petals in the wind, spring morning golden mist, god rays through towering trees, moss-covered stones, tranquil silence"
+    "neon-drenched cyberpunk megacity at 3am, towering holographic ads reflected in rain-soaked streets, steam vents, crowds with umbrellas, flying vehicles, oppressive urban density, blade runner atmosphere"
+    "chain of floating sky islands connected by ancient rope bridges, titanic waterfalls cascading through clouds, ruins of a lost civilization, glowing crystal spires, violet and gold sunset sky"
+    "abyssal ocean floor, cathedral of bioluminescent coral, giant ancient stone ruins half-buried in sand, shafts of silver light from the surface, schools of glowing deep-sea creatures"
+    "mountain village buried in snowfall, glowing paper lanterns strung over a frozen river, warm amber light from traditional wooden inns, pine trees heavy with snow, distant peak under moonlight"
+    "vast red desert at dusk, towering ancient temple facades carved into canyon walls, a lone figure silhouette on a sand dune, crimson and violet sky, geometric sand patterns, archaeological dig site"
+    "primordial enchanted forest, cathedral canopy of ancient oaks, giant bioluminescent mushrooms six meters tall, firefly clouds, moonbeams cutting through thick mist, fairy-ring clearing"
+    "orbital megastructure, curved habitat ring against a gas giant, stars and nebula filling the sky, shuttle traffic, solar panels spanning kilometers, hard sci-fi detail"
+    "mediterranean cliff town at magic hour, terracotta rooftops cascading to turquoise sea, bougainvillea, golden light on whitewashed walls, a dozen sailboats in the harbor below"
+    "bamboo forest at dawn, perfect columns of green, morning fog low to the ground, shafts of warm light, mossy stone lanterns, a hidden wooden torii gate ahead"
+    "caldera of an active stratovolcano, rivers of orange lava cutting through black rock, billowing ash clouds lit from below, eerie desolate beauty, heat shimmer"
+    "subarctic tundra, aurora borealis in ribbons of green and violet across the sky, perfectly still frozen lake as a mirror, lone wolf at the treeline, deep cosmic silence"
+    "massive dragon coiled around a moonlit mountain peak above the clouds, lightning crackling in the distance, scales of burnished copper, epic fantasy scale, painterly detail"
+    "feudal japanese castle on a clifftop, cherry blossom trees in full bloom, samurai on patrol below, pink and gold dawn sky, mist-filled valley, swooping cranes"
+    "sunken ancient city on the seafloor, marble columns draped in coral, stained glass cathedral windows intact, rays of turquoise light, whale swimming overhead through open roof"
 )
 
-# Pick a random prompt
 PROMPT="${PROMPTS[$RANDOM % ${#PROMPTS[@]}]}"
+FULL_PROMPT="${QUALITY}, ${PROMPT}, wide panoramic view, epic scale, cinematic framing"
 
-# Add style enhancers
-FULL_PROMPT="$PROMPT, anime style, masterpiece, ultra wide, panoramic"
-NEGATIVE_PROMPT="lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, multiple panels, split screen"
+echo "Model:    $SELECTED_MODEL"
+echo "Steps:    $STEPS  CFG: $CFG  Sampler: $SAMPLER/$SCHEDULER"
+echo "Prompt:   $PROMPT"
+echo ""
+notify-send "Wallpaper Generator" "Generating..." -t 2000
 
-echo "Generating wallpaper..."
-echo "Prompt: $PROMPT"
-notify-send "Wallpaper Generation" "Generating random anime wallpaper..." -t 3000
-
-# Generate image using SDXL (Animagine XL 4.0)
-# SDXL works better at higher res than SD 1.5 and uses different optimal settings
 "$SD_BIN" \
-  -m "$MODEL_PATH" \
-  -p "$FULL_PROMPT" \
-  -n "$NEGATIVE_PROMPT" \
-  -o "$TEMP_OUTPUT" \
-  -W "$GEN_WIDTH" \
-  -H "$GEN_HEIGHT" \
-  --steps 35 \
-  --cfg-scale 6.5 \
-  --sampling-method euler_a \
-  --rng cuda \
-  --clip-on-cpu \
-  --offload-to-cpu \
-  --vae-tiling \
-  -s -1
+    -m "$MODEL_PATH" \
+    -p "$FULL_PROMPT" \
+    -n "$NEG" \
+    -o "$TEMP_GEN" \
+    -W "$GEN_W" -H "$GEN_H" \
+    --steps "$STEPS" \
+    --cfg-scale "$CFG" \
+    --sampling-method "$SAMPLER" \
+    --scheduler "$SCHEDULER" \
+    --rng cuda \
+    --vae-tiling \
+    -s -1
 
-# Check if generation was successful
-if [ ! -f "$TEMP_OUTPUT" ]; then
-  echo "Error: No image generated"
-  notify-send "Wallpaper Generation" "Failed - no image generated" -t 3000
-  exit 1
+if [ $? -ne 0 ] || [ ! -f "$TEMP_GEN" ]; then
+    echo "Generation failed."
+    notify-send "Wallpaper Generator" "Generation failed" -t 3000
+    exit 1
 fi
 
-# Move to wallpaper directory with timestamp
+echo "Upscaling 4x..."
+notify-send "Wallpaper Generator" "Upscaling 4x..." -t 2000
+"$UPSCAYL" -i "$TEMP_GEN" -o "$TEMP_UPSCALED" \
+    -n digital-art-4x -m "$UPSCAYL_MODELS" -z 4 -f png 2>/dev/null
+
+if [ ! -f "$TEMP_UPSCALED" ]; then
+    cp "$TEMP_GEN" "$TEMP_UPSCALED"
+fi
+rm -f "$TEMP_GEN"
+
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-DEST="$WALLPAPER_DIR/anime_${TIMESTAMP}.png"
+DEST="$WALLPAPER_DIR/wallpaper_${TIMESTAMP}.png"
 mkdir -p "$WALLPAPER_DIR"
-mv "$TEMP_OUTPUT" "$DEST"
+convert "$TEMP_UPSCALED" \
+    -resize ${TARGET_W}x${TARGET_H}^ \
+    -gravity center \
+    -extent ${TARGET_W}x${TARGET_H} \
+    "$DEST"
+rm -f "$TEMP_UPSCALED"
 
-echo "Wallpaper generated and saved to: $DEST"
-
-# Set as current wallpaper
-if command -v swww &>/dev/null; then
-  swww img "$DEST" \
-    --transition-type wipe \
-    --transition-angle 30 \
-    --transition-duration 2 \
-    --outputs HDMI-A-2 2>/dev/null
-  echo "$DEST" >"$HOME/.cache/current-wallpaper"
-fi
-
-notify-send "Wallpaper Generated!" "Saved and applied successfully" -t 3000
+echo "Saved: $DEST"
+awww img "$DEST" --outputs "$MONITOR" 2>/dev/null
+echo "$DEST" > "$HOME/.cache/current-wallpaper"
+notify-send "Wallpaper Ready" "$(basename "$DEST")" -t 3000

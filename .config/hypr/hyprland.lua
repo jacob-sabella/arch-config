@@ -1,0 +1,1 @@
+/home/jsabella/.config/hypr/lua/hyprland.lua

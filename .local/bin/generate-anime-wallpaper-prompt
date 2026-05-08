@@ -172,13 +172,9 @@ echo ""
 echo "✓ Saved to: $DEST"
 
 # Set as wallpaper
-if command -v swww &> /dev/null; then
+if command -v awww &> /dev/null; then
     echo "Setting as wallpaper..."
-    swww img "$DEST" \
-        --transition-type wipe \
-        --transition-angle 30 \
-        --transition-duration 2 \
-        --outputs HDMI-A-2 2>/dev/null
+    awww img "$DEST" --outputs HDMI-A-2 2>/dev/null
     echo "$DEST" > "$HOME/.cache/current-wallpaper"
     echo "✓ Wallpaper applied!"
 fi
