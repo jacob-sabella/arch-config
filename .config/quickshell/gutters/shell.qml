@@ -1,12 +1,9 @@
 //@ pragma UseQApplication
 //@ pragma IgnoreSystemSettings
 //
-// Side-gutter visual backdrop. Renders two layer-shell columns matching the
-// monitor's reserved area (left + right). Polls `hyprctl monitors -j` every
-// 1s so widths track the sidepanels.lua aspect-ratio presets.
-//
-// exclusiveZone = 0 — Hyprland already reserves via hl.monitor, we don't
-// want to double-reserve.
+// Side-gutter visual backdrop. Two layer-shell columns matching the monitor's
+// reserved area (left + right). Color tracks matugen.json (live-watched), so
+// `matugen` regen retints the gutters automatically.
 //
 // Run via: qs -p ~/.config/quickshell/gutters/shell.qml -d
 //
@@ -19,6 +16,24 @@ Scope {
   id: root
   property int leftWidth: 0
   property int rightWidth: 0
+  property string gutterColor: "#322827"   // fallback until matugen.json loads
+
+  // Watch matugen.json so theme regens propagate live.
+  FileView {
+    path: Qt.resolvedUrl(Quickshell.env("HOME") + "/.config/quickshell/matugen.json")
+    watchChanges: true
+    onFileChanged: this.reload()
+    onLoaded: {
+      try {
+        const data = JSON.parse(this.text());
+        if (data && data.surface_container_high) {
+          root.gutterColor = data.surface_container_high;
+        }
+      } catch (e) {
+        console.warn("gutter: failed to parse matugen.json:", e);
+      }
+    }
+  }
 
   Process {
     id: poll
@@ -45,12 +60,12 @@ Scope {
     PanelWindow {
       required property ShellScreen modelData
       screen: modelData
-      color: "#2a2020cc"          // brighter + more opaque so empty gutters are obvious          // subtle red-tinted dark
+      color: root.gutterColor
       visible: root.leftWidth > 0
       anchors { left: true; top: true; bottom: true }
       implicitWidth: root.leftWidth
-      exclusiveZone: -1           // ignore Hyprland's reserved-area offset
-      WlrLayershell.layer: WlrLayer.Bottom   // sit BELOW windows
+      exclusiveZone: -1
+      WlrLayershell.layer: WlrLayer.Bottom
     }
   }
 
@@ -60,7 +75,7 @@ Scope {
     PanelWindow {
       required property ShellScreen modelData
       screen: modelData
-      color: "#2a2020cc"          // brighter + more opaque so empty gutters are obvious
+      color: root.gutterColor
       visible: root.rightWidth > 0
       anchors { right: true; top: true; bottom: true }
       implicitWidth: root.rightWidth
